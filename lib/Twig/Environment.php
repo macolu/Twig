@@ -30,6 +30,7 @@ class Twig_Environment
     protected $runtimeInitialized;
     protected $loadedTemplates;
     protected $strictVariables;
+    protected $cacheTreeLevel;
 
     /**
      * Constructor.
@@ -78,6 +79,7 @@ class Twig_Environment
         $this->autoReload         = isset($options['auto_reload']) ? (bool) $options['auto_reload'] : $this->debug;
         $this->extensions         = array('core' => new Twig_Extension_Core());
         $this->strictVariables    = isset($options['strict_variables']) ? (bool) $options['strict_variables'] : $this->debug;
+        $this->cacheTreeLevel     = isset($options['cache_tree_level']) ? min((int) $options['cache_tree_level'], 16) : 0;
         $this->runtimeInitialized = false;
         if (isset($options['cache']) && $options['cache']) {
             $this->setCache($options['cache']);
@@ -150,7 +152,22 @@ class Twig_Environment
 
     public function getCacheFilename($name)
     {
-        return $this->getCache() ? $this->getCache().'/'.$this->getTemplateClass($name).'.php' : false;
+        if (!$this->getCache()) {
+            return false;
+        }
+
+        $className = $this->getTemplateClass($name);
+        $dirName = $this->getCache();
+
+        for ($i = 1; $i <= $this->cacheTreeLevel; $i++) {
+            $dirName .= '/'.substr($className, (-2 * $i), 2);
+        }
+
+        if (!is_dir($dirName)) {
+            mkdir($dirName, 0755, true);
+        }
+
+        return $dirName.'/'.$className.'.php';
     }
 
     public function getTrimBlocks()
