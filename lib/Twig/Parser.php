@@ -12,7 +12,7 @@
 class Twig_Parser implements Twig_ParserInterface
 {
     protected $stream;
-    protected $extends;
+    protected $parent;
     protected $handlers;
     protected $visitors;
     protected $expressionParser;
@@ -42,10 +42,8 @@ class Twig_Parser implements Twig_ParserInterface
      */
     public function parse(Twig_TokenStream $stream)
     {
-        $this->handlers = array();
-        $this->visitors = array();
-
         // tag handlers
+        $this->handlers = array();
         foreach ($this->env->getTokenParsers() as $handler) {
             $handler->setParser($this);
 
@@ -60,7 +58,7 @@ class Twig_Parser implements Twig_ParserInterface
         }
 
         $this->stream = $stream;
-        $this->extends = null;
+        $this->parent = null;
         $this->blocks = array();
         $this->macros = array();
         $this->blockStack = array();
@@ -75,32 +73,18 @@ class Twig_Parser implements Twig_ParserInterface
             throw $e;
         }
 
-        if (!is_null($this->extends)) {
-            // check that the body only contains block references and empty text nodes
-            foreach ($body as $node)
-            {
-                if (
-                    ($node instanceof Twig_Node_Text && !preg_match('/^\s*$/s', $node['data']))
-                    ||
-                    (!$node instanceof Twig_Node_Text && !$node instanceof Twig_Node_BlockReference)
-                ) {
-                    throw new Twig_SyntaxError('A template that extends another one cannot have a body', $node->getLine(), $this->stream->getFilename());
-                }
-            }
-
-            foreach ($this->blocks as $block) {
-                $block['parent'] = $this->extends;
-            }
+        if (null !== $this->parent) {
+            $this->checkBodyNodes($body);
         }
 
-        $node = new Twig_Node_Module($body, $this->extends, new Twig_Node($this->blocks), new Twig_Node($this->macros), $this->stream->getFilename());
+        $node = new Twig_Node_Module($body, $this->parent, new Twig_Node($this->blocks), new Twig_Node($this->macros), $this->stream->getFilename());
 
         $traverser = new Twig_NodeTraverser($this->env, $this->visitors);
 
         return $traverser->traverse($node);
     }
 
-    public function subparse($test, $drop_needle = false)
+    public function subparse($test, $dropNeedle = false)
     {
         $lineno = $this->getCurrentToken()->getLine();
         $rv = array();
@@ -127,7 +111,7 @@ class Twig_Parser implements Twig_ParserInterface
                     }
 
                     if (!is_null($test) && call_user_func($test, $token)) {
-                        if ($drop_needle) {
+                        if ($dropNeedle) {
                             $this->stream->next();
                         }
 
@@ -212,12 +196,12 @@ class Twig_Parser implements Twig_ParserInterface
 
     public function getParent()
     {
-        return $this->extends;
+        return $this->parent;
     }
 
-    public function setParent($extends)
+    public function setParent($parent)
     {
-        $this->extends = $extends;
+        $this->parent = $parent;
     }
 
     public function getStream()
@@ -228,5 +212,20 @@ class Twig_Parser implements Twig_ParserInterface
     public function getCurrentToken()
     {
         return $this->stream->getCurrent();
+    }
+
+    protected function checkBodyNodes($body)
+    {
+        // check that the body only contains block references and empty text nodes
+        foreach ($body as $node)
+        {
+            if (
+                ($node instanceof Twig_Node_Text && !preg_match('/^\s*$/s', $node['data']))
+                ||
+                (!$node instanceof Twig_Node_Text && !$node instanceof Twig_Node_BlockReference)
+            ) {
+                throw new Twig_SyntaxError('A template that extends another one cannot have a body', $node->getLine(), $this->stream->getFilename());
+            }
+        }
     }
 }

@@ -23,6 +23,11 @@ class Twig_Node_Import extends Twig_Node
         parent::__construct(array('expr' => $expr, 'var' => $var), array(), $lineno, $tag);
     }
 
+    /**
+     * Compiles the node to PHP.
+     *
+     * @param Twig_Compiler A Twig_Compiler instance
+     */
     public function compile($compiler)
     {
         $compiler
@@ -30,9 +35,18 @@ class Twig_Node_Import extends Twig_Node
             ->write('')
             ->subcompile($this->var)
             ->raw(' = ')
-            ->raw('$this->env->loadTemplate(')
-            ->subcompile($this->expr)
-            ->raw(", true);\n")
         ;
+
+        if ($this->expr instanceof Twig_Node_Expression_Name && 'self' === $this->expr['name']) {
+            $compiler->raw("\$this");
+        } else {
+            $compiler
+                ->raw('$this->env->loadTemplate(')
+                ->subcompile($this->expr)
+                ->raw(", true)")
+            ;
+        }
+
+        $compiler->raw(";\n");
     }
 }

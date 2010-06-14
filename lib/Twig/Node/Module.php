@@ -19,20 +19,28 @@
  */
 class Twig_Node_Module extends Twig_Node
 {
-    public function __construct(Twig_NodeInterface $body, $extends, Twig_NodeInterface $blocks, Twig_NodeInterface $macros, $filename)
+    public function __construct(Twig_NodeInterface $body, Twig_Node_Expression $parent = null, Twig_NodeInterface $blocks, Twig_NodeInterface $macros, $filename)
     {
-        parent::__construct(array('body' => $body, 'blocks' => $blocks, 'macros' => $macros), array('filename' => $filename, 'extends' => $extends), 1);
+        parent::__construct(array('parent' => $parent, 'body' => $body, 'blocks' => $blocks, 'macros' => $macros), array('filename' => $filename), 1);
     }
 
+    /**
+     * Compiles the node to PHP.
+     *
+     * @param Twig_Compiler A Twig_Compiler instance
+     */
     public function compile($compiler)
     {
         $this->compileTemplate($compiler);
-        $this->compileMacros($compiler);
     }
 
     protected function compileTemplate($compiler)
     {
         $this->compileClassHeader($compiler);
+
+        if (count($this->blocks)) {
+            $this->compileConstructor($compiler);
+        }
 
         $this->compileDisplayHeader($compiler);
 
@@ -42,14 +50,14 @@ class Twig_Node_Module extends Twig_Node
 
         $compiler->subcompile($this->blocks);
 
-        $this->compileGetName($compiler);
+        $this->compileMacros($compiler);
 
         $this->compileClassFooter($compiler);
     }
 
     protected function compileDisplayBody($compiler)
     {
-        if (null !== $this['extends']) {
+        if (null !== $this->parent) {
             // remove all but import nodes
             foreach ($this->body as $node) {
                 if ($node instanceof Twig_Node_Import) {
@@ -58,8 +66,35 @@ class Twig_Node_Module extends Twig_Node
             }
 
             $compiler
-                ->raw("\n")
-                ->write("parent::display(\$context);\n")
+                ->write("if (null === \$this->parent) {\n")
+                ->indent();
+            ;
+
+            if ($this->parent instanceof Twig_Node_Expression_Constant) {
+                $compiler
+                    ->write("\$this->parent = \$this->env->loadTemplate(")
+                    ->subcompile($this->parent)
+                    ->raw(");\n")
+                ;
+            } else {
+                $compiler
+                    ->write("\$this->parent = ")
+                    ->subcompile($this->parent)
+                    ->raw(";\n")
+                    ->write("if (!\$this->parent")
+                    ->raw(" instanceof Twig_Template) {\n")
+                    ->indent()
+                    ->write("\$this->parent = \$this->env->loadTemplate(\$this->parent);\n")
+                    ->outdent()
+                    ->write("}\n")
+                ;
+            }
+
+            $compiler
+                ->write("\$this->parent->pushBlocks(\$this->blocks);\n")
+                ->outdent()
+                ->write("}\n")
+                ->write("\$this->parent->display(\$context);\n")
             ;
         } else {
             $compiler->subcompile($this->body);
@@ -68,28 +103,42 @@ class Twig_Node_Module extends Twig_Node
 
     protected function compileClassHeader($compiler)
     {
-        $compiler->write("<?php\n\n");
+        $compiler
+            ->write("<?php\n\n")
+            // if the filename contains */, add a blank to avoid a PHP parse error
+            ->write("/* ".str_replace('*/', '* /', $this['filename'])." */\n")
+            ->write('class '.$compiler->getEnvironment()->getTemplateClass($this['filename']))
+            ->raw(sprintf(" extends %s\n", $compiler->getEnvironment()->getBaseTemplateClass()))
+            ->write("{\n")
+            ->indent()
+        ;
 
-        if (null !== $this['extends']) {
+        if (null !== $this->parent) {
+            $compiler->write("protected \$parent;\n\n");
+        }
+    }
+
+    protected function compileConstructor($compiler)
+    {
+        $compiler
+            ->write("public function __construct(Twig_Environment \$env)\n", "{\n")
+            ->indent()
+            ->write("parent::__construct(\$env);\n\n")
+            ->write("\$this->blocks = array(\n")
+            ->indent()
+        ;
+
+        foreach ($this->blocks as $name => $node) {
             $compiler
-                ->write('$this->loadTemplate(')
-                ->repr($this['extends'])
-                ->raw(");\n\n")
+                ->write(sprintf("'%s' => array(array(\$this, 'block_%s')),\n", $name, $name))
             ;
         }
 
         $compiler
-            // if the filename contains */, add a blank to avoid a PHP parse error
-            ->write("/* ".str_replace('*/', '* /', $this['filename'])." */\n")
-            ->write('class '.$compiler->getEnvironment()->getTemplateClass($this['filename']))
-        ;
-
-        $parent = null === $this['extends'] ? $compiler->getEnvironment()->getBaseTemplateClass() : $compiler->getEnvironment()->getTemplateClass($this['extends']);
-
-        $compiler
-            ->raw(" extends $parent\n")
-            ->write("{\n")
-            ->indent()
+            ->outdent()
+            ->write(");\n")
+            ->outdent()
+            ->write("}\n\n");
         ;
     }
 
@@ -98,19 +147,6 @@ class Twig_Node_Module extends Twig_Node
         $compiler
             ->write("public function display(array \$context)\n", "{\n")
             ->indent()
-        ;
-    }
-
-    protected function compileGetName($compiler)
-    {
-        $compiler
-            ->write("public function getName()\n", "{\n")
-            ->indent()
-            ->write('return ')
-            ->string($this['filename'])
-            ->raw(";\n")
-            ->outdent()
-            ->write("}\n\n")
         ;
     }
 
@@ -132,19 +168,6 @@ class Twig_Node_Module extends Twig_Node
 
     protected function compileMacros($compiler)
     {
-        $compiler
-            ->write("\n")
-            ->write('class '.$compiler->getEnvironment()->getTemplateClass($this['filename']).'_Macro extends Twig_Macro'."\n")
-            ->write("{\n")
-            ->indent()
-        ;
-
-        // macros
         $compiler->subcompile($this->macros);
-
-        $compiler
-            ->outdent()
-            ->write("}\n")
-        ;
     }
 }

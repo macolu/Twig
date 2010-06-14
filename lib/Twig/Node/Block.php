@@ -24,11 +24,16 @@ class Twig_Node_Block extends Twig_Node
         parent::__construct(array('body' => $body), array('name' => $name), $lineno, $tag);
     }
 
+    /**
+     * Compiles the node to PHP.
+     *
+     * @param Twig_Compiler A Twig_Compiler instance
+     */
     public function compile($compiler)
     {
         $compiler
             ->addDebugInfo($this)
-            ->write(sprintf("public function block_%s(\$context)\n", $this['name']), "{\n")
+            ->write(sprintf("public function block_%s(\$context, \$parents)\n", $this['name']), "{\n")
             ->indent()
         ;
 
