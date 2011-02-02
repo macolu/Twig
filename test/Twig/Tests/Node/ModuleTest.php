@@ -25,11 +25,11 @@ class Twig_Tests_Node_ModuleTest extends Twig_Tests_Node_TestCase
         $filename = 'foo.twig';
         $node = new Twig_Node_Module($body, $parent, $blocks, $macros, $filename);
 
-        $this->assertEquals($body, $node->body);
-        $this->assertEquals($blocks, $node->blocks);
-        $this->assertEquals($macros, $node->macros);
-        $this->assertEquals($parent, $node->parent);
-        $this->assertEquals($filename, $node['filename']);
+        $this->assertEquals($body, $node->getNode('body'));
+        $this->assertEquals($blocks, $node->getNode('blocks'));
+        $this->assertEquals($macros, $node->getNode('macros'));
+        $this->assertEquals($parent, $node->getNode('parent'));
+        $this->assertEquals($filename, $node->getAttribute('filename'));
     }
 
     /**
@@ -67,11 +67,17 @@ class Twig_Tests_Node_ModuleTest extends Twig_Tests_Node_TestCase
 /* foo.twig */
 class __TwigTemplate_be925a7b06dda0dfdbd18a1509f7eb34 extends Twig_Template
 {
-    public function display(array \$context)
+    public function display(array \$context, array \$blocks = array())
     {
+        \$context = array_merge(\$this->env->getGlobals(), \$context);
+
         echo "foo";
     }
 
+    public function getTemplateName()
+    {
+        return "foo.twig";
+    }
 }
 EOF
         , $twig);
@@ -90,16 +96,27 @@ class __TwigTemplate_be925a7b06dda0dfdbd18a1509f7eb34 extends Twig_Template
 {
     protected \$parent;
 
-    public function display(array \$context)
+    public function getParent(array \$context)
     {
-        \$context['macro'] = \$this->env->loadTemplate("foo.twig", true);
         if (null === \$this->parent) {
             \$this->parent = \$this->env->loadTemplate("layout.twig");
-            \$this->parent->pushBlocks(\$this->blocks);
         }
-        \$this->parent->display(\$context);
+
+        return \$this->parent;
     }
 
+    public function display(array \$context, array \$blocks = array())
+    {
+        \$context = array_merge(\$this->env->getGlobals(), \$context);
+
+        \$context['macro'] = \$this->env->loadTemplate("foo.twig", true);
+        \$this->getParent(\$context)->display(\$context, array_merge(\$this->blocks, \$blocks));
+    }
+
+    public function getTemplateName()
+    {
+        return "foo.twig";
+    }
 }
 EOF
         , $twig);
@@ -121,18 +138,29 @@ class __TwigTemplate_be925a7b06dda0dfdbd18a1509f7eb34 extends Twig_Template
 {
     protected \$parent;
 
-    public function display(array \$context)
+    public function getParent(array \$context)
     {
         if (null === \$this->parent) {
-            \$this->parent = (true) ? ("foo") : ("foo");
+            \$this->parent = ((true) ? ("foo") : ("foo"));
             if (!\$this->parent instanceof Twig_Template) {
                 \$this->parent = \$this->env->loadTemplate(\$this->parent);
             }
-            \$this->parent->pushBlocks(\$this->blocks);
         }
-        \$this->parent->display(\$context);
+
+        return \$this->parent;
     }
 
+    public function display(array \$context, array \$blocks = array())
+    {
+        \$context = array_merge(\$this->env->getGlobals(), \$context);
+
+        \$this->getParent(\$context)->display(\$context, array_merge(\$this->blocks, \$blocks));
+    }
+
+    public function getTemplateName()
+    {
+        return "foo.twig";
+    }
 }
 EOF
         , $twig);
